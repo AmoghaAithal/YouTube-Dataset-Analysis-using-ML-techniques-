@@ -15,7 +15,7 @@ All files are part of **a single project** and should be read and run **together
 ```
 Project 1.Rmd   # Data cleaning, preprocessing, EDA, baseline models
 Project 2.Rmd   # Regularized regression and decision tree models
-Project 3.Rmd   # Advanced tree-based models and ensemble methids
+Project 3.Rmd   # Advanced models (ensemble methods)
 ```
 
 ---
