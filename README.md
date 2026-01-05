@@ -21,7 +21,7 @@ Understanding what drives video performance on YouTube enables content creators 
 ## Repository Structure
 ```
 Project 1.Rmd / Project-1.html   # Data cleaning, EDA, baseline models
-Project 2.Rmd / Project-2.html   # Regularized regression and tree models
+Project 2.Rmd / Project-2.html   # Feature engineering and tree models
 Project 3.Rmd / Project-3.html   # Advanced ensemble methods
 README.md                            # This file
 ```
@@ -55,53 +55,57 @@ Large-scale YouTube Trending Videos dataset containing **100,000+ observations**
 
 ---
 
-## Analysis Workflow (stages do not strictly correspond to project numbers)
+## Analysis Workflow
 
-### Stage 1: Data Preparation & Baseline Models
+### Stage 1: Classification Models & Model Selection
 **File:** Project 1.Rmd / Project-1.html
 
 **Key Steps:**
-- Data loading and quality assessment
-- Missing value treatment and outlier detection
-- Feature engineering (temporal features, text processing, categorical encoding)
-- Exploratory data analysis with visualizations
-- Baseline models: Linear regression, logistic regression
+- Data loading and preprocessing
+- Exploratory analysis of the YouTube trending videos dataset
+- Feature preparation for classification tasks
+- Logistic Regression for binary classification
+- Classification Trees for non-linear decision boundaries
+- Model evaluation and selection using validation techniques
 
-**Outcome:** Clean modeling dataset and baseline performance benchmarks
-
----
-
-### Stage 2: Regularization & Tree-Based Models
-**File:** Project 2.Rmd` / Project-2.html
-
-**Models Implemented:**
-- **Lasso Regression** (L1 regularization for feature selection)
-- **Ridge Regression** (L2 regularization for coefficient shrinkage)
-- **Elastic Net** (combined L1/L2 penalty via `glmnet`)
-- **Decision Trees** (`rpart` with pruning)
-
-**Techniques:**
-- K-fold cross-validation for hyperparameter tuning
-- Regularization path analysis
-- Model comparison using validation metrics
-
-**Outcome:** Improved generalization through regularization; identification of key predictive features
+**Outcome:**  
+Initial classification models built and evaluated, establishing baseline performance and introducing tree-based methods for comparison.
 
 ---
 
-### Stage 3: Advanced Ensemble Methods
+### Stage 2: Model Validation & Feature Engineering
+**File:** Project 2.Rmd / Project-2.html
+
+**Key Steps:**
+- Model validation strategies
+- Performance evaluation using ROC curves and AUC
+- Feature engineering to improve predictive power
+- Comparative assessment of model performance
+
+**Outcome:**  
+Improved understanding of model diagnostics and validation, with enhanced features leading to better classification performance.
+
+---
+
+### Stage 3: Regularization & Ensemble Methods
 **File:** Project 3.Rmd / Project-3.html
 
 **Models Implemented:**
-- **Random Forest** (`ranger` package) - bagging with feature randomness
-- **Gradient Boosting** (`xgboost`) - sequential error correction
+- Ridge Regression
+- Lasso Regression
+- Ensemble Methods:
+  - Random Forest
+  - Gradient Boosting (XGBoost)
 
 **Techniques:**
-- Grid search for optimal hyperparameters
+- Comparison of Ridge and Lasso regularization
+- Ensemble learning for improved predictive accuracy
 - Feature importance analysis
-- Final model evaluation on holdout test set
+- Final model evaluation
 
-**Outcome:** Ensemble methods achieve best performance; Random Forest selected for final predictions due to highest validation accuracy (75.14%).
+**Outcome:**  
+Regularization techniques reduce overfitting, and ensemble models deliver the strongest overall performance, with Random Forest and Gradient Boosting achieving the best results.
+
 
 ---
 
