@@ -168,6 +168,8 @@ Project 1.Rmd → Project 2.Rmd → Project 3.Rmd
 ## Contact
 
 **Name:** **Amogha Aithal G V**
+
 **Email:** getamogha@gmail.com
+
 **Linkedin:** www.linkedin.com/in/amogha-aithal-539449317
 
