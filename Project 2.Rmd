@@ -1,0 +1,727 @@
+---
+title: "Assignment 2"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup}
+
+# Set CRAN mirror explicitly for knitting / non-interactive runs
+options(repos = c(CRAN = "https://cloud.r-project.org"))
+
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+library(tidyverse)
+library(rpart)
+library(caret)
+set.seed(1)
+```
+
+## Problem Overview
+
+The goal is model selection and feature engineering. We will:
+
+1. Set up the dataset by doing some preprocessing and feature engineering
+2. Use robust model selection to compare models with different features
+3. Interpret and evaluate your models
+4. Make (new) predictions in the test dataset
+
+## Introduction
+
+YouTube is the world’s largest video-sharing platform. Videos can "trend" in one or more countries, and their popularity is influenced by many factors such as category, duration, channel, and engagement metrics.
+
+## Data
+
+There are more than 100,000 YouTube trending videos in the dataset. Each row contains metadata about a trending video, including its category, country, channel, engagement metrics, and more.
+
+You are provided with the following files:
+
+1. `yt_training_X.csv`: features for the training instances (videos published before a certain date).
+2. `yt_training_y.csv`: labels for the target variable for the training instances.
+3. `yt_test_X.csv`: features for the test instances (videos published after that date). Your goal is to make predictions for the instances in the test set.
+
+For convenience, a smaller subset of the training data is also provided:
+
+4. `yt_small_training_X.csv`
+5. `yt_small_training_y.csv`
+
+A "fake" test set of y-variable labels (all "NO") is provided for coding convenience:
+
+6. `yt_test_y_FAKE.csv`
+
+## Assignment:-
+
+## Setup
+
+```{r loading}
+#train_X <- read_csv("yt_small_training_X.csv")
+#train_y <- read_csv("yt_small_training_y.csv")
+
+train_X <- read_csv("yt_training_X.csv")
+train_y <- read_csv("yt_training_y.csv")
+
+test_X <- read_csv("yt_test_X.csv")
+test_y <- read_csv("yt_test_y_FAKE.csv")
+
+# join the X and y variables
+train <- train_X %>%
+  mutate(success = as.factor(train_y$success),
+         original_set = "tr")
+
+test <- test_X %>%
+  mutate(success = as.factor(test_y$success),
+         original_set = "te")
+
+# stack the training and test data
+all_data <- rbind(train, test)
+
+new_data <- all_data %>% 
+  select(video_view_count, video_like_count, video_comment_count, video_duration_seconds, video_definition, channel_subscriber_count, video_category_id, success, original_set) 
+new_data
+
+
+new_data <- new_data %>%
+  mutate(across(c(video_definition, success), as.factor))
+
+new_data
+# Feature engineering (handle division-by-zero)
+new_data <- new_data %>%
+  mutate(
+    likes_per_view    = ifelse(is.na(video_view_count) | video_view_count == 0, 0,
+                               video_like_count / video_view_count),
+    comments_per_view = ifelse(is.na(video_view_count) | video_view_count == 0, 0,
+                               video_comment_count / video_view_count),
+  )
+
+# Above-average-by-category flag
+category_avg <- new_data %>%
+  group_by(video_category_id) %>%
+  summarise(avg_view = mean(video_view_count, na.rm = TRUE), .groups = "drop")
+
+new_data <- new_data %>%
+  inner_join(category_avg, by = "video_category_id") %>%
+  mutate(high_for_category = ifelse(video_view_count > avg_view, "YES", "NO"),
+         high_for_category = as.factor(high_for_category)) %>%
+  select(-avg_view)
+
+data_test <- new_data %>%
+  filter(original_set == 'te') %>%
+  select(-original_set)
+
+data_labeled <- new_data %>%
+  filter(original_set == 'tr') %>%
+  select(-original_set)
+
+n_labeled_insts <- nrow(data_labeled)
+train_insts = sample(n_labeled_insts, .7*n_labeled_insts)
+
+data_train <- data_labeled[train_insts,]
+data_valid <- data_labeled[-train_insts,]
+
+```
+
+---
+
+## 0: Example answer
+
+What is the mean of the video_view_count variable?
+
+ANSWER: The mean view count of the videos in this dataset is $X (3011091).
+
+```{r code0}
+view_mean <- all_data %>%
+  summarise(view_mean = mean(video_view_count))
+```
+
+---
+
+## 1: Model Validation
+
+a) Set `data_valid` aside for now. Perform 10-fold cross-validation within `data_train`. Compute the 10-fold cross-validated accuracy of the baseline classifier, as well as a logistic regression model, and four trees: with maxdepth = 2, 7, 15, and 20. The models should use the features defined by formula ~ . as given below. Assume a cutoff of 0.5 for this question.
+
+*Hint: I have set up a lot of this for you. You might find the functions that I have defined below useful.*
+
+**ANSWER TO QUESTION 1a HERE:** 
+
+```{r code1a}
+#PUT QUESTION 1a CODE HERE
+
+#predict success as a function of all other variables in the dataframe
+# we can reuse this model definition for all of the models we need to train below.
+formula <- success ~ .
+
+# Define a function that trains logistic regression and predicts probabilities
+log_tr_pred <- function(train_data, valid_data, model_formula){
+  trained_model <- glm(data = train_data, model_formula, family = "binomial") 
+  predictions <- predict(trained_model, newdata = valid_data, type = "response") 
+  return(predictions)
+}
+
+# Define a function that trains trees with a given maxdepth and predicts probabilities
+tree_tr_pred <- function(train_data, valid_data, model_formula, treedepth){
+  mytree <- rpart(model_formula,
+                  data = train_data,
+                  method = "class",
+                  maxdepth = treedepth,
+                  cp = -1,
+                  minsplit = 2)
+  predictions = predict(mytree, newdata = valid_data)[,2]
+  return(predictions)
+}
+
+# Define a function that uses scores to classify based on a cutoff c
+classify <- function(scores, c){
+  classifications <- ifelse(scores > c, "YES" , "NO") 
+  return(classifications) 
+}
+
+# randomly shuffle the labeled data  ---- (drop NAs first so models don't return NA predictions)
+labeled_shuffle <- data_train[sample(nrow(data_train)),]
+
+# define k = the number of folds
+k <- 10
+
+# separate data into k equally-sized folds
+# cut() will assign "fold numbers" to each instance
+folds <- cut(seq(1, nrow(labeled_shuffle)), breaks = k, labels = FALSE)
+
+#--Q1a
+
+labeled_shuffle$success <- factor(labeled_shuffle$success, levels = c("NO","YES"))
+
+complex_spec <- formula
+
+# Make vectors of zeros to store your performance in each fold using the rep function
+baseline_acc = rep(0, k)
+logistic_acc = rep(0, k)
+tree2_acc = rep(0, k)
+tree7_acc = rep(0, k)
+tree15_acc = rep(0, k)
+tree20_acc = rep(0, k)
+
+# Use a for loop to repeat k times
+for(i in 1:k){
+  # Segment your data by fold using the which() function 
+  valid_inds <- which(folds == i, arr.ind = TRUE)
+  valid_fold <- labeled_shuffle[valid_inds, ]
+  train_fold <- labeled_shuffle[-valid_inds, ]
+  
+  valid_actuals <- valid_fold$success
+
+  # 1. train and predict in the training data
+  
+  # Baseline
+  p_yes_train <- mean(train_fold$success == "YES", na.rm = TRUE)
+  base_class <- ifelse(p_yes_train >=0.5, "YES","NO")
+  base_pred <- factor(rep(base_class, nrow(valid_fold)),levels = c("NO","YES"))
+  baseline_acc[i] <- mean(base_pred == valid_fold$success)
+  
+  
+  # Logistic regression
+  glm_model_cv <- glm(complex_spec, data=train_fold, family = "binomial")
+  p_glm <- predict(glm_model_cv, newdata=valid_fold,type="response")
+  pred_glm <- factor(ifelse(p_glm >=0.5, "YES", "NO"),levels = c("NO","YES"))
+  logistic_acc[i] <- mean(pred_glm== valid_fold$success, na.rm=TRUE)
+  
+  # Trees
+  tree2_probs  <- tree_tr_pred(train_fold, valid_fold, formula, treedepth = 2)
+  tree7_probs  <- tree_tr_pred(train_fold, valid_fold, formula, treedepth = 7)
+  tree15_probs <- tree_tr_pred(train_fold, valid_fold, formula, treedepth = 15)
+  tree20_probs <- tree_tr_pred(train_fold, valid_fold, formula, treedepth = 20)
+  
+  tree2_pred  <- factor(classify(tree2_probs, 0.5),  levels = levels(valid_actuals))
+  tree7_pred  <- factor(classify(tree7_probs, 0.5),  levels = levels(valid_actuals))
+  tree15_pred <- factor(classify(tree15_probs, 0.5), levels = levels(valid_actuals))
+  tree20_pred <- factor(classify(tree20_probs, 0.5), levels = levels(valid_actuals))
+
+  # 2. assess performance (accuracy) and 3. store performance
+  baseline_acc[i] <- mean(base_pred == valid_actuals, na.rm = TRUE)
+  logistic_acc[i] <- mean(pred_glm      == valid_actuals, na.rm = TRUE)
+  tree2_acc[i]    <- mean(tree2_pred    == valid_actuals, na.rm = TRUE)
+  tree7_acc[i]    <- mean(tree7_pred    == valid_actuals, na.rm = TRUE)
+  tree15_acc[i]   <- mean(tree15_pred   == valid_actuals, na.rm = TRUE)
+  tree20_acc[i]   <- mean(tree20_pred   == valid_actuals, na.rm = TRUE)
+}
+
+# outside of the loop, calculate the average performance for each model
+avg_results <- data.frame(
+  Model = c("Baseline", "Logistic Regression", 
+            "Tree depth 2", "Tree depth 7", 
+            "Tree depth 15", "Tree depth 20"),
+  Accuracy = c(mean(baseline_acc),
+               mean(logistic_acc),
+               mean(tree2_acc),
+               mean(tree7_acc),
+               mean(tree15_acc),
+               mean(tree20_acc))
+)
+avg_results
+
+```
+
+b) Make a plot of accuracy by fold for each model (make sure to make the information for each model a different color). Is the highest-accuracy model the same for every fold?
+
+**ANSWER TO QUESTION 1b HERE:** 
+
+```{r code1b, message=FALSE, warning=FALSE}
+# Uses accuracy vectors from 1(a): baseline_acc, logistic_acc, tree2_acc, tree7_acc, tree15_acc, tree20_acc
+
+k <- length(baseline_acc)
+
+acc_by_fold <- tibble::tibble(
+  Fold = 1:k,
+  `Baseline (majority)` = baseline_acc,
+  `Logistic regression` = logistic_acc,
+  `Tree (maxdepth=2)` = tree2_acc,
+  `Tree (maxdepth=7)` = tree7_acc,
+  `Tree (maxdepth=15)` = tree15_acc,
+  `Tree (maxdepth=20)` = tree20_acc
+) %>%
+  tidyr::pivot_longer(-Fold, names_to = "Model", values_to = "Accuracy")
+
+# Plot: different color per model
+ggplot2::ggplot(acc_by_fold, ggplot2::aes(x = Fold, y = Accuracy, color = Model)) +
+  ggplot2::geom_line() +
+  ggplot2::geom_point() +
+  ggplot2::scale_x_continuous(breaks = 1:k) +
+  ggplot2::labs(title = "10-fold Accuracy by Model", y = "Accuracy") +
+  ggplot2::theme_minimal()
+
+# Determine if the same model wins every fold
+winners <- acc_by_fold %>%
+  dplyr::group_by(Fold) %>%
+  dplyr::slice_max(Accuracy, with_ties = FALSE) %>%
+  dplyr::ungroup()
+
+print(winners)
+
+same_winner <- dplyr::n_distinct(winners$Model) == 1
+cat("Is the highest-accuracy model the same for every fold? ", same_winner, "\n")
+
+
+```
+
+c) Which of these models has the best average cross-validated performance? Is this different from the best model you found in assignment 1? Which do you trust more and why? Using your best cross-validated model, retrain a model using all of data_train with the best specification and predict probabilities in data_valid.
+Classify the instances with a cutoff of 0.5 and compute the validation accuracy. Are the cross-validated accuracy and the accuracy in the validation data the same?
+
+**ANSWER TO QUESTION 1c HERE:** 
+As per 1(a), the DECISION TREE MODEL with DEPTH=7 has the best average cross-validated accuracy(0.6691).
+In HW 1, the best model(highest accuracy)was the DECISION TREE MODEL with depth=8, with an accuracy of 0.62.
+
+Between these two, I would trust the cross-validated model more.
+Cross-validation averages the model performance across many different splits, so it is more stable and less sensitive to randomness compared to using a single split like in HW 1.
+
+
+```{r code1c}
+# best model chosen from 1(a): decision tree with maxdepth = 7
+formula <- success ~ .
+
+# retrain tree on ALL of data_train
+final_fit <- rpart(formula, data = data_train, method = "class",
+                   control = rpart.control(maxdepth = 7, cp = -1, minsplit = 2))
+
+# predict probabilities in data_valid
+valid_probs <- predict(final_fit, newdata = data_valid)[, "YES"]
+
+# classify with cutoff = 0.5
+valid_pred <- ifelse(valid_probs >= 0.5, "YES", "NO")
+valid_pred <- factor(valid_pred, levels = levels(data_valid$success))
+
+# compute validation accuracy
+valid_acc <- mean(valid_pred == data_valid$success)
+
+# cross-validated accuracy for the best model (Tree depth 7, from 1a results)
+cv_acc <- mean(tree7_acc)
+
+cat("Cross-validated accuracy (Tree depth 7):", cv_acc, "\n")
+cat("Accuracy of validation data(Tree depth 7):", valid_acc, "\n")
+
+```
+As seen above, the Cross-validated accuracy and accuracy of validation data is not exactly equal but VERY CLOSE to each other, with just small difference (less than 1%).
+
+
+d) Using the predicted probabilities you estimated in the validation data in part (c), make a plot of cutoff vs. accuracy, TPR, and TNR similar to the one I made in class. There should be 100 cutoffs between 0 and 1, incrementing by .01. Which cutoff gives you the highest accuracy? Which cutoff should you use if you want at least 80% FPR? At least 80% TPR? 
+
+**ANSWER TO QUESTION 1d HERE:** 
+
+```{r code1d}
+
+#valid_probs: predicted P(YES) on data_valid using the chosen best model (depth=7)
+#data_valid$success: factor with levels c("NO","YES") (or similar)
+
+#Build metrics over 100 cutoffs 0, 0.01, ..., 1.00
+cutoffs <- seq(0, 1, by = 0.01)
+
+metrics_for_cutoff <- function(cut) {
+  pred <- ifelse(valid_probs >= cut, "YES", "NO")
+  pred <- factor(pred, levels = levels(data_valid$success))
+  actual <- data_valid$success
+  
+  TP <- sum(pred == "YES" & actual == "YES", na.rm = TRUE)
+  TN <- sum(pred == "NO"  & actual == "NO",  na.rm = TRUE)
+  FP <- sum(pred == "YES" & actual == "NO",  na.rm = TRUE)
+  FN <- sum(pred == "NO"  & actual == "YES", na.rm = TRUE)
+  
+  TPR <- if ((TP + FN) > 0) TP / (TP + FN) else NA_real_   # sensitivity / recall
+  TNR <- if ((TN + FP) > 0) TN / (TN + FP) else NA_real_   # specificity
+  ACC <- mean(pred == actual, na.rm = TRUE)
+  FPR <- 1 - TNR
+  
+  tibble::tibble(
+    cutoff = cut,
+    Accuracy = ACC,
+    TPR = TPR,
+    TNR = TNR,
+    FPR = FPR
+  )
+}
+
+metrics_tbl <- purrr::map_dfr(cutoffs, metrics_for_cutoff)
+
+# Plot: cutoff vs Accuracy, TPR, TNR (different colors)
+plot_df <- metrics_tbl %>%
+  dplyr::select(cutoff, Accuracy, TPR, TNR) %>%
+  tidyr::pivot_longer(-cutoff, names_to = "Metric", values_to = "Value")
+
+ggplot2::ggplot(plot_df, ggplot2::aes(x = cutoff, y = Value, color = Metric)) +
+  ggplot2::geom_line() +
+  ggplot2::labs(title = "Cutoff vs Accuracy / TPR / TNR (validation set)",
+                x = "Cutoff", y = "Value") +
+  ggplot2::theme_minimal()
+
+# Which cutoff gives the highest Accuracy?
+best_acc_row <- metrics_tbl %>% dplyr::slice_max(Accuracy, with_ties = FALSE)
+best_cutoff_for_accuracy <- best_acc_row$cutoff
+best_accuracy <- best_acc_row$Accuracy
+
+# Smallest cutoff > 0 with at least 80% FPR
+cutoff_for_FPR80 <- metrics_tbl %>%
+  dplyr::filter(cutoff > 0, FPR >= 0.80) %>%     # <-- skip 0
+  dplyr::slice_min(cutoff, with_ties = FALSE) %>%
+  dplyr::pull(cutoff)
+if (length(cutoff_for_FPR80) == 0) cutoff_for_FPR80 <- NA_real_
+
+# Smallest cutoff > 0 with at least 80% TPR
+cutoff_for_TPR80 <- metrics_tbl %>%
+  dplyr::filter(cutoff > 0, TPR >= 0.80) %>%     # <-- skip 0
+  dplyr::slice_min(cutoff, with_ties = FALSE) %>%
+  dplyr::pull(cutoff)
+if (length(cutoff_for_TPR80) == 0) cutoff_for_TPR80 <- NA_real_
+
+cat("Highest Accuracy at cutoff =", best_cutoff_for_accuracy,
+    "with Accuracy =", round(best_accuracy, 4), "\n")
+cat("Smallest cutoff > 0 achieving at least 80% FPR:", cutoff_for_FPR80, "\n")
+cat("Smallest cutoff > 0 achieving at least 80% TPR:", cutoff_for_TPR80, "\n")
+
+```
+
+---
+
+## 2: ROC and AUC
+
+a) Now estimate probabilities in data_valid for each remaining model. You should end up with 6 arrays of predicted probabilities, including the one you have already generated for your best cross-validated model: the baseline, logistic regression, and classification trees with maxdepth = 2, 7, 15, and 20.
+
+**ANSWER TO QUESTION 2a HERE:** 
+
+```{r code2a, message=FALSE, warning=FALSE}
+
+# ## Baseline:
+p_yes_train <- mean(data_train$success == "YES", na.rm = TRUE)
+p_base_valid <- rep(p_yes_train, nrow(data_valid))
+
+# ## Logistic regression
+p_log_valid <- log_tr_pred(data_train, data_valid, formula)
+
+# ## Trees at depths 2, 7, 15, 20
+p_tree2_valid <- tree_tr_pred(data_train, data_valid, formula, treedepth = 2)
+p_tree7_valid <- tree_tr_pred(data_train, data_valid, formula, treedepth = 7)
+p_tree15_valid <- tree_tr_pred(data_train, data_valid, formula, treedepth = 15)
+p_tree20_valid <- tree_tr_pred(data_train, data_valid, formula, treedepth = 20)
+
+prob_table_wide <- tibble(row_id = seq_len(nrow(data_valid)), baseline = p_base_valid, logistic = p_log_valid, tree2 = p_tree2_valid, tree_7 = p_tree7_valid, tree_15 = p_tree15_valid, tree_20 = p_tree20_valid)
+
+print(prob_table_wide)
+
+```
+
+b) Compute the AUC for each of the 6 models. Does the highest-AUC model also have the highest accuracy given a cutoff of 0.5?
+
+**ANSWER TO QUESTION 2b HERE:** 
+YES. In this case, the highest-AUC model(0.7282) also has the highest accuracy at 0.5(0.6) and that is the DECISION TREE at depth=7. 
+
+```{r code2b}
+library(pROC)
+
+# actual outcomes
+y_valid <- data_valid$success  # factor with levels c("NO","YES")
+
+# collect all six sets of predicted probabilities
+models <- list(
+  "Baseline"      = p_base_valid,
+  "Logistic"      = p_log_valid,
+  "Tree depth 2"  = p_tree2_valid,
+  "Tree depth 7"  = p_tree7_valid,
+  "Tree depth 15" = p_tree15_valid,
+  "Tree depth 20" = p_tree20_valid
+)
+
+# helper: accuracy at cutoff = 0.5
+acc_at_05 <- function(probs, actual) {
+  preds <- ifelse(probs >= 0.5, "YES", "NO")
+  mean(factor(preds, levels = levels(actual)) == actual, na.rm = TRUE)
+}
+
+# compute AUC and accuracy, skipping rows with NA probs
+compute_metrics <- function(probs, actual) {
+  keep <- !is.na(probs)
+  if (sum(keep) == 0) {
+    return(c(Accuracy = NA, AUC = NA))
+  }
+  acc <- acc_at_05(probs[keep], actual[keep])
+  auc_val <- auc(roc(actual[keep], probs[keep]))
+  c(Accuracy = acc, AUC = auc_val)
+}
+
+results_mat <- sapply(models, compute_metrics, actual = y_valid)
+
+results_4b <- tibble::tibble(
+  Model = colnames(results_mat),
+  Accuracy_at_0.5 = round(results_mat["Accuracy", ], 4),
+  AUC = round(results_mat["AUC", ], 4)
+) %>%
+  dplyr::arrange(desc(AUC)) #arrange the models in desc order of their AUC
+
+results_4b
+
+```
+
+c) Create an ROC plot including ROC curves for each of the 6 models. Make sure to depict them using different colors. Is the highest-AUC model consistently the best, across all FPR values?
+
+**ANSWER TO QUESTION 2c HERE:** 
+The highest-AUC model(decision tree at depth=7) is the best across MOST of the FPR values, but NOT ACROSS ALL. At some values, decision tree at depths=15 fare slightly better than this model.
+```{r code2c}
+library(pROC)
+
+# actual labels
+y_valid <- data_valid$success
+
+# six models from 4(b)
+models <- list(
+  "Baseline"      = p_base_valid,
+  "Logistic"      = p_log_valid,
+  "Tree depth 2"  = p_tree2_valid,
+  "Tree depth 7"  = p_tree7_valid,
+  "Tree depth 15" = p_tree15_valid,
+  "Tree depth 20" = p_tree20_valid
+)
+
+# build ROC objects (drop NAs)
+roc_list <- lapply(models, function(p) {
+  keep <- !is.na(p)
+  roc(y_valid[keep], p[keep], quiet = TRUE)
+})
+
+# plot all ROC curves
+plot(roc_list[[1]], col = 1, lwd = 2, main = "ROC Curves for 6 Models")
+for (i in 2:length(roc_list)) {
+  plot(roc_list[[i]], col = i, lwd = 2, add = TRUE)
+}
+legend("bottomright", legend = names(models), col = 1:6, lwd = 2)
+
+# also print AUC values for clarity
+auc_vals <- sapply(roc_list, auc)
+auc_vals
+
+```
+
+---
+
+## 3: Feature Engineering
+
+So far, we have been using a small and relatively "clean" subset of the data. Many of the other features will require some cleaning in order to be used in a model.
+
+The new dataframe `original_data` has all of the original features, plus the new ones that we created and processed in HW1. We will use this going forward.
+
+```{r code3setup}
+original_data <- rbind(train, test) %>%
+  mutate(
+    video_category_id = as.factor(video_category_id),
+    channel_country = as.factor(channel_country),
+    video_definition = as.factor(video_definition),
+    success = as.factor(success),
+    likes_per_view = ifelse(video_view_count > 0, video_like_count / video_view_count, 0),
+    comments_per_view = ifelse(video_view_count > 0, video_comment_count / video_view_count, 0),
+    is_hd = ifelse(video_definition == "hd", 1, 0),
+  ) %>%
+  group_by(video_category_id) %>%
+  mutate(
+    mean_views = mean(video_view_count, na.rm = TRUE),
+    high_for_category = ifelse(video_view_count > mean_views, "YES", "NO")
+  ) %>%
+  select(-mean_views) %>%
+  ungroup() %>%
+  mutate(high_for_category = as.factor(high_for_category))
+```
+
+a) The following columns (among others) may have missing values:
+
+- video_tags
+- channel_country
+- channel_description
+- video_description
+- video_default_thumbnail
+
+Impute the missing values using the approaches we discussed in class. Make sure to convert any of these features to factors, if that is appropriate.
+
+**ANSWER TO QUESTION 3a HERE:** 
+```{r code3a}
+# Impute missing values for selected columns
+
+original_data <- original_data %>%
+  mutate(
+    video_tags = ifelse(is.na(video_tags), "UNKNOWN", video_tags),
+    channel_country = ifelse(is.na(channel_country), "UNKNOWN", as.character(channel_country)),
+    channel_description = ifelse(is.na(channel_description), "", channel_description),
+    video_description = ifelse(is.na(video_description), "", video_description),
+    video_default_thumbnail = ifelse(is.na(video_default_thumbnail), "MISSING", video_default_thumbnail)
+  ) %>%
+  # Convert appropriate variables to factors
+  mutate(
+    video_tags = as.factor(video_tags),
+    channel_country = as.factor(channel_country),
+    video_default_thumbnail = as.factor(video_default_thumbnail)
+  )
+```
+
+b) The `video_category_id` column contains many categories, but some of them have very few videos. Group any `video_category_id` containing <= 50 instances into a new category called 'Other' and convert the variable into a factor. How many levels does the factor have?
+
+**ANSWER TO QUESTION 3b HERE:** 
+Ans. The inference here is that the new category "Other" encompasses 14 categories of videos which have less than 50 instances.
+```{r code3b}
+# Count how many rows per category
+cat_counts <- original_data %>%
+  count(video_category_id)
+
+# Replace categories with <= 50 instances by "Other"
+original_data <- original_data %>%
+  mutate(video_category_id = ifelse(video_category_id %in% cat_counts$video_category_id[cat_counts$n <= 50],
+                                    "Other", as.character(video_category_id))) %>%
+  mutate(video_category_id = as.factor(video_category_id))
+
+# How many levels now?
+n_levels <- nlevels(original_data$video_category_id)
+n_levels
+```
+
+c) Find the number of tags for each video. Make sure to deal with NA's!
+
+**ANSWER TO QUESTION 3c HERE:** 
+```{r code3c}
+# Count the number of tags per video
+# Assume tags are stored as a string separated by "|"
+original_data <- original_data %>%
+  mutate(
+    n_tags = ifelse(is.na(video_tags), 
+                    0,   # if missing, 0 tags
+                    stringr::str_count(as.character(video_tags), "\\|") + 1)
+  )
+
+# Quick preview
+original_data %>% select(video_tags, n_tags) %>% head(10) #head(10) shows only first 10 videos.
+
+```
+
+d) Select all of the features used in HW1, plus the new ones you just cleaned and created. Make sure to also select success and original_set. The list of variables selected should be:
+
+- video_view_count
+- video_like_count
+- video_comment_count
+- video_duration_seconds
+- video_category_id
+- channel_country
+- video_definition
+- channel_subscriber_count
+- likes_per_view
+- comments_per_view
+- is_hd
+- high_for_category
+- num_tags
+- success
+- original_set
+
+Create a one-hot encoding, split the resulting dataframe into labeled and unlabeled data called `feats_labeled` and `feats_unlabeled` using the `original_set` variable (then drop it from both), and convert `success` into a factor.
+
+**ANSWER TO QUESTION 3d HERE:** 
+```{r code3d}
+library(dplyr)
+library(caret)
+library(stringr)
+
+# 1) Ensure the tag-count column name matches spec: num_tags
+if ("n_tags" %in% names(original_data)) {
+  original_data <- original_data %>% rename(num_tags = n_tags)
+} else if (!"num_tags" %in% names(original_data)) {
+  # fallback: compute from video_tags if needed
+  original_data <- original_data %>%
+    mutate(num_tags = ifelse(is.na(video_tags), 0,
+                             stringr::str_count(as.character(video_tags), "\\|") + 1))
+}
+
+# 2) Make sure categorical fields are factors, success too
+original_data <- original_data %>%
+  mutate(
+    video_category_id   = as.factor(video_category_id),
+    channel_country     = as.factor(channel_country),
+    video_definition    = as.factor(video_definition),
+    high_for_category   = as.factor(high_for_category),
+    success             = as.factor(success)
+  )
+
+# 3) Select exactly the requested variables
+feats_selected <- original_data %>%
+  select(
+    video_view_count,
+    video_like_count,
+    video_comment_count,
+    video_duration_seconds,
+    video_category_id,
+    channel_country,
+    video_definition,
+    channel_subscriber_count,
+    likes_per_view,
+    comments_per_view,
+    is_hd,
+    high_for_category,
+    num_tags,
+    success,
+    original_set
+  )
+
+# 4) One-hot encode predictors (exclude success & original_set from encoding)
+dv <- caret::dummyVars(
+  ~ . - success - original_set,
+  data = feats_selected,
+  fullRank = TRUE   # drop one level per factor to avoid collinearity
+)
+
+X_encoded <- as.data.frame(predict(dv, newdata = feats_selected))
+
+# 5) Attach target + split key back
+feats_all <- cbind(
+  X_encoded,
+  success      = feats_selected$success,
+  original_set = feats_selected$original_set
+)
+
+# 6) Split into labeled and unlabeled by original_set, then drop original_set
+feats_labeled <- feats_all %>%
+  filter(original_set == "tr") %>%
+  select(-original_set) %>%
+  mutate(success = as.factor(success))
+
+feats_unlabeled <- feats_all %>%
+  filter(original_set == "te") %>%
+  select(-original_set) %>%
+  mutate(success = as.factor(success))  # ok if it's a placeholder; keeps schema consistent
+
+```

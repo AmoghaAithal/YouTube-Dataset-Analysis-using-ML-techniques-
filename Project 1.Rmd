@@ -1,0 +1,462 @@
+---
+title: "Assignment 1"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+```{r setup}
+
+# Set CRAN mirror explicitly for knitting / non-interactive runs
+options(repos = c(CRAN = "https://cloud.r-project.org"))
+
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+library(tidyverse)
+library(rpart)
+set.seed(1)
+```
+
+## Problem Overview
+
+The goal is data exploration and cleaning, classification, and model selection. You will:
+
+1. Set up the dataset by doing some preprocessing and EDA
+2. Develop logistic regression and tree-based models
+3. Interpret and evaluate your models
+4. Make predictions in a test dataset
+
+## Introduction
+
+YouTube is the world’s largest video-sharing platform. Videos can "trend" in one or more countries, and their popularity is influenced by many factors.
+
+## Data
+
+There are more than 100,000 YouTube trending videos in the dataset. Each row contains metadata about a trending video, including its category, country, channel, engagement metrics, and more.
+
+You are provided with the following files:
+
+1. `yt_training_X.csv`: features for the training instances 
+2. `yt_training_y.csv`: labels for the target variable for the training instances.
+3. `yt_test_X.csv`: features for the test instances. Your goal is to make predictions for the instances in the test set.
+
+For convenience, a smaller subset of the training data is also provided:
+
+4. `yt_small_training_X.csv`
+5. `yt_small_training_y.csv`
+
+A "fake" test set of y-variable labels (all "NO") is provided for coding convenience:
+
+6. `yt_test_y_FAKE.csv`
+
+## Assignment
+
+```{r loading}
+
+#train_X <- read_csv("yt_small_training_X.csv")
+#train_y <- read_csv("yt_small_training_y.csv")
+
+train_X <- read_csv("yt_training_X.csv")
+train_y <- read_csv("yt_training_y.csv")
+
+test_X <- read_csv("yt_test_X.csv")
+test_y <- read_csv("yt_test_y_FAKE.csv")
+
+# join the X and y variables
+train <- train_X %>%
+  mutate(success = as.factor(train_y$success),
+         original_set = "tr")
+
+test <- test_X %>%
+  mutate(success = as.factor(test_y$success),
+         original_set = "te")
+
+# stack the training and test data
+all_data <- rbind(train, test)
+
+names(all_data)
+
+```
+
+## 0: Example answer
+
+What is the mean of the video_view_count variable?
+
+**ANSWER: The mean view count of the videos in this dataset is 3064288.**
+
+```{r code0}
+view_mean <- all_data %>%
+  summarise(view_mean = mean(video_view_count))
+```
+
+## 1: Setup
+
+a) Create a new dataset by selecting the following features:
+- video_view_count
+- video_like_count
+- video_comment_count
+- video_duration_seconds
+- video_definition
+- video_category_id
+- channel_subscriber_count
+- success (this is the target variable)
+- original_set (this will be used for filtering later)
+
+
+**ANSWER TO QUESTION 1a HERE:** 
+
+```{r code1a}
+#PUT QUESTION 1a CODE HERE
+new_dataset<-all_data[,c("video_view_count","video_like_count","video_comment_count","video_duration_seconds","video_definition","video_category_id","channel_subscriber_count","success","original_set")]
+```
+
+b) Do some preprocessing on the data:
+- Make sure video_definition, and success are factors
+- Create new features:
+    - likes_per_view = video_like_count / video_view_count (handle division by zero)
+    - comments_per_view = video_comment_count / video_view_count (handle division by zero)
+- Create a new feature called high_for_category which is "YES" if the video_view_count is above-average for its category, and "NO" otherwise. Convert this to a factor.
+
+**ANSWER TO QUESTION 1b HERE:** 
+
+```{r code1b}
+library(dplyr)
+
+# Convert the variables to factors
+new_dataset <- new_dataset %>%
+  mutate(
+    video_definition = as.factor(video_definition),
+    success = as.factor(success),
+    
+    # Create new features (handle division by zero with ifelse)
+    likes_per_view = ifelse(video_view_count > 0,
+                            video_like_count / video_view_count, 0),
+    comments_per_view = ifelse(video_view_count > 0,
+                               video_comment_count / video_view_count, 0)
+  ) %>%
+  
+  # Create high_for_category feature
+  group_by(video_category_id) %>%
+  mutate(
+    avg_views_cat = mean(video_view_count, na.rm = TRUE),
+    high_for_category = ifelse(video_view_count > avg_views_cat, "YES", "NO")
+  ) %>%
+  ungroup() %>%
+  mutate(high_for_category = as.factor(high_for_category)) %>%
+  select(-avg_views_cat)  # drop helper column
+```
+
+c) Split the data into training, validation, and test. First, separate out the test set by selecting only instances where original_set = te. Separate out the training set by selecting only instances where original_set = tr. Split the training set into 70% train, 30% validation instances. Make sure to drop the original_set variable from all dataframes.
+
+**ANSWER TO QUESTION 1c HERE:** 
+
+```{r code1c}
+library("caTools")
+#Test Set:
+test_set<-new_dataset %>%
+  filter(original_set=="te")%>%
+  select(-original_set)
+
+#Training Set:
+training_set<-new_dataset %>%
+  filter(original_set=="tr")%>%
+  select(-original_set)
+
+#Split of training into 70% training and 30% validation:
+set.seed(123)
+split_data<-sample.split(training_set$success,SplitRatio=0.7) #split.sample function is a part of caTools library.The above line selects the column "success" from the DF "training_set"(SYNTAX:- DF$reqd_col) and splits the instances in that column in ratio 7:3 between 'T' and 'V' sets by separately considering each of the 2 values (YES and NO).
+
+train_set<-subset(training_set,split_data==TRUE)
+validation_set<-subset(training_set,split_data==FALSE)
+
+```
+
+d) Conduct some preliminary EDA by making plots using the new training data.
+
+- Make at least one boxplot showing the relationship between success and one of the numeric features.
+- Make at least one two-way table showing the relationship between success and one of the categorical features.
+- Make at least one scatterplot showing the relationship between any two numeric features.
+
+Record any observations about the relationships you see in the data.
+
+**ANSWER TO QUESTION 1d HERE:** 
+
+```{r code1d}
+install.packages("ggplot2")
+library(ggplot2)
+
+# 1. Boxplot: success vs likes_per_view
+ggplot(train_set, aes(x = success, y = likes_per_view)) +
+  geom_boxplot(fill = "red") +
+  labs(title = "Likes per View by Success")
+
+# 2. Two-way table: success vs high_for_category
+table(train_set$success, train_set$high_for_category)
+
+# 3. Scatterplot: likes_per_view vs comments_per_view
+ggplot(train_set, aes(x = likes_per_view, y = comments_per_view, color = success)) +
+  geom_point(alpha = 0.6) +   #This line is simply used for better display
+  labs(title = "Likes per View vs Comments per View")
+```
+1.The boxplot showing the relationship between video_view_count and success indicates that successful (YES) videos tend to have higher view counts, while unsuccessful (NO) videos generally have lower view counts.
+
+2.The two-way table reveals that within the training set, a higher proportion of successful (YES) videos (7805) have view counts above the average for their category, compared to the majority of unsuccessful (NO) videos (33323) which have view counts below the average.
+
+3.The scatterplot demonstrates that as the number of video views increases, the number of video likes also tends to increase, indicating a positive correlation between the two metrics.
+
+## 2: Logistic Regression
+
+a) Using the training data, train a Logistic Regression model to predict success using the following features:
+
+- video_view_count
+- video_like_count
+- video_comment_count
+- video_duration_seconds
+- likes_per_view
+- comments_per_view
+- high_for_category
+
+Report the AIC for your model.
+
+**ANSWER TO QUESTION 2a HERE:** 
+
+```{r code2a}
+# Logistic Regression model
+logist_model <- glm(success ~ video_view_count +
+                              video_like_count +
+                              video_comment_count +
+                              video_duration_seconds +
+                              likes_per_view +
+                              comments_per_view +
+                              high_for_category,
+                   data = train_set,
+                   family = binomial) #family=binomial specifies that the model is a logistic model.
+
+# Checking model summary
+summary(logist_model)
+
+# Report the AIC
+model_aic <- AIC(logist_model)
+model_aic
+
+```
+
+b) What is the coefficient for likes_per_view? Provide a precise (numerical) interpretation of the coefficient.
+
+**ANSWER TO QUESTION 2b HERE:**
+
+Coefficient of likes_per_view = −2.806.
+INTERPRETATION:- Holding others constant, a 1 unit increase in likes_per_view multiplies the odds of success by e^(−2.806)
+
+c) What is the coefficient for high_for_category.YES? Provide a precise (numerical) interpretation of this coefficient. 
+
+**ANSWER TO QUESTION 2c HERE:** 
+
+Coefficient for high_for_category.YES = 0.4437.
+INTERPRETATION:- high_for_category=YES multiplies the odds of success by e^(0.4437) versus NO
+
+d) Use the model to make predictions in the validation data and report the accuracy. You can assume a cutoff of 0.5. Make sure your predictions match the data type/format of the target variable in the validation data!
+
+**ANSWER TO QUESTION 2d HERE:** 
+
+```{r code2d}
+# 1. Generating predicted probabilities on validation set:-
+val_probs <- predict(logist_model, newdata = validation_set, type = "response")
+
+# 2. Applying cutoff of 0.5 to get class predictions:-
+val_preds <- ifelse(val_probs >= 0.5, "YES", "NO")
+
+# 3. Converting to factor with the same levels as validation_set$success:-
+val_preds <- factor(val_preds, levels = levels(validation_set$success))
+
+# 4. Computing the accuracy
+accuracy <- mean(val_preds == validation_set$success)
+accuracy
+```
+
+## 3: Classification Trees
+
+a. Train a full (unstopped, unpruned tree) using rpart(). How many terminal nodes are in the full tree? Which variable has the highest information gain (leads to the biggest decrease in impurity)? How do you know?
+
+**ANSWER TO QUESTION 3a HERE:** 
+
+```{r code tree_setup}
+#Training the model:-
+library(rpart)
+full_tree <- rpart(
+  success ~ video_view_count + video_like_count + video_comment_count +
+            video_duration_seconds + likes_per_view + comments_per_view +
+            high_for_category,
+  data   = train_set,
+  method = "class",
+  parms  = list(split = "information"),  # use entropy (information gain)
+  control = rpart.control(
+    cp = 0,         # no pruning / no complexity penalty
+    minsplit = 1,
+    minbucket = 1,
+    maxdepth = 30,  
+    xval = 0
+  )
+)
+
+#How many terminal nodes?
+num_terminal_nodes <- sum(full_tree$frame$var == "<leaf>")
+num_terminal_nodes
+
+#Which variable has the highest information gain i.e. biggest decrease in impurity?
+imp <- full_tree$variable.importance           
+top_var <- names(imp)[which.max(imp)]
+top_gain <- imp[which.max(imp)]
+
+top_var
+top_gain
+```
+b. Create trees of maxdepth 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 20, 25, and 30. Plot fitting curves consisting of the accuracy in the validation and training sets for each tree depth (assuming a cutoff of 0.5). Make sure the two sets of points are different colors.
+
+**ANSWER TO QUESTION 3b HERE:** 
+
+```{r code3b}
+library(rpart)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+# Depths to evaluate
+depths <- c(2,3,4,5,6,7,8,9,10,11,12,13,14,15,20,25,30)
+
+# Positive/negative class labels (assumes "YES"/"NO" or similar)
+lvl <- levels(train_set$success)
+pos <- if ("YES" %in% lvl) "YES" else tail(lvl, 1)  # positive level
+neg <- setdiff(lvl, pos)[1]
+
+# Helper to get accuracy at a given depth
+acc_at_depth <- function(d) {
+  fit <- rpart(
+    success ~ video_view_count + video_like_count + video_comment_count +
+              video_duration_seconds + likes_per_view + comments_per_view +
+              high_for_category,
+    data   = train_set,
+    method = "class",
+    parms  = list(split = "information"),
+    control = rpart.control(cp = 0, minsplit = 1, minbucket = 1,
+                            maxdepth = d, xval = 0)
+  )
+
+  # Train predictions
+  p_tr <- predict(fit, newdata = train_set, type = "prob")[, pos]
+  yhat_tr <- factor(ifelse(p_tr >= 0.5, pos, neg), levels = lvl)
+  acc_tr <- mean(yhat_tr == train_set$success)
+
+  # Validation predictions
+  p_va <- predict(fit, newdata = validation_set, type = "prob")[, pos]
+  yhat_va <- factor(ifelse(p_va >= 0.5, pos, neg), levels = lvl)
+  acc_va <- mean(yhat_va == validation_set$success)
+
+  tibble(depth = d, train_accuracy = acc_tr, val_accuracy = acc_va)
+}
+
+# Compute accuracies for all depths
+acc_df <- depths %>% lapply(acc_at_depth) %>% bind_rows()
+
+# Long format for plotting
+acc_long <- acc_df %>%
+  pivot_longer(cols = c(train_accuracy, val_accuracy),
+               names_to = "set", values_to = "accuracy")
+
+# Plot fitting curves (different colors for train vs validation)
+ggplot(acc_long, aes(x = depth, y = accuracy, color = set)) +
+  geom_point() +
+  geom_line() +
+  scale_x_continuous(breaks = depths) +
+  labs(title = "Accuracy vs. Tree Depth",
+       x = "Max Depth",
+       y = "Accuracy",
+       color = "Dataset") +
+  theme_minimal()
+```
+
+c. Which maxdepth is the best, and how did you select the best one? Report the validation accuracy of your best tree. Save your best tree model as best_tree_mod (you may have to run rpart() again).
+
+**ANSWER TO QUESTION 3c HERE:** 
+The best "maxdepth" is the one at which validation accuracy is the highest. Further, if two or more values of "maxdepth" have the same validation accuracy, then the lowest value is consdiered the best since it indicates less overfitting.  
+```{r code3c}
+# Find depth with highest validation accuracy
+best_row <- acc_df[which.max(acc_df$val_accuracy), ]
+best_depth <- best_row$depth
+best_val_acc <- best_row$val_accuracy
+
+best_depth
+best_val_acc
+
+best_tree_mod <- rpart(
+  success ~ video_view_count + video_like_count + video_comment_count +
+            video_duration_seconds + likes_per_view + comments_per_view +
+            high_for_category,
+  data   = train_set,
+  method = "class",
+  parms  = list(split = "information"),
+  control = rpart.control(cp = 0, minsplit = 1, minbucket = 1,
+                          maxdepth = best_depth, xval = 0)
+)
+```
+-- Best Maxdepth(maxdepth at which validation acccuracy is highest) = 8.
+-- Corresponding validation accuracy = 0.6471 (64.71%)
+
+## 4: Model Selection and Deployment
+
+a) If you were going to pick one of the two models trained above to make accurate predictions in the test data, which would you pick and why?
+
+**ANSWER TO QUESTION 4a HERE:** 
+To make more accurate predictions in the test data, I would select the DECISION TREE MODEL at depth = 8 as it has a higher validation accuracy of 0.6471 compared to the LOGISTIC REGRESSION MODEL, which has a validation accuracy of 0.6204.
+REASON:- Validation accuracy is the best indicator of how well the model will generalize to new, unseen test data in the real-world.
+
+b) For the model you have selected, make predictions in the test data and do the classification using a cutoff of 0.5. Write them to a .csv file called success_groupXYZ.csv, where you replace XYZ with your team name (or your own last name if you have not joined a team). Your file should have:
+
+- One column, with a header of x
+- [N] predictions, one for each test instance
+- Predictions in the format YES/NO
+
+OPTIONAL: submit your predictions to the class contest. If your file does not match these specifications exactly your submission will not be eligible for the leaderboard!
+
+**ANSWER TO QUESTION 4b HERE:** 
+
+```{r code4b}
+
+# 1. Predict probabilities in the test data(tree model)
+test_pred <- predict(best_tree_mod, newdata = test_set, type = "prob")[, "YES"]
+
+# 2. Convert probabilities to YES/NO with cutoff = 0.5
+test_pred_class <- ifelse(test_pred >= 0.5, "YES", "NO")
+test_predictions <- factor(test_pred_class, levels = c("YES", "NO"))
+table(test_pred_class)
+
+# 3. Write one-column CSV with header 'x'(rep XYZ with group or last name)
+write.table(test_pred_class,
+            "success_group02.csv",
+            row.names = FALSE)
+
+# 4. To see the output display
+read.csv("success_group02.csv")
+```
+
+## 5: OPTIONAL ENHANCEMENTS - can be done in teams
+
+If you would like to excel in the contest, you can spend basically infinite time improving your predictions. Your goal should be to predict the values in the test data (for which you do not know the labels) as accurately as possible. Here are some things you can try given just the basics covered in the first few weeks of class. If you have exhausted these possibilities and are wondering where to go next, I'm happy to make more suggestions in office hours.
+
+- Use the full training X and y to train models (Caveats: more training instances will result in slower training time. Also, the model that appears to be "better" with a smaller training set may or may not be better on a larger training set. More later!)
+- Select and/or clean more features (Same caveats as above hold. Also, some features have missing values or other issues, so beware!).
+- Try a more fine-grained set of possible maxdepths for the decision tree model.
+- Try changing the cutoff for classification.
+
+Include the code you used to generate your enhanced predictions in the code block below.
+
+```{r code5}
+val_p <- predict(best_tree_mod, newdata = validation_set, type = "prob")[, "YES"]
+val_base <- mean(validation_set$success == "YES")
+
+a <- seq(0.30, 0.70, by = 0.01)
+val_pred_rate <- sapply(a, function(t) mean(val_p >= t, na.rm = TRUE))
+
+cutoff <- a[which.min(abs(val_pred_rate - val_base))]
+cutoff
+```
