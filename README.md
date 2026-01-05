@@ -1,14 +1,15 @@
 # YouTube Video Performance Prediction
 
-## Project Overview
+## Project Overview 
 
 This project analyzes YouTube trending video metadata to predict **success** using machine learning techniques in R. The analysis demonstrates a complete ML workflow from data preprocessing through advanced ensemble modeling.
 
 **Academic Context:** This project was developed as part of my Data Mining course (BUDT758) at University of Maryland's Robert H. Smith School of Business. The analysis is organized across three sequential R Markdown notebooks, each building upon the previous stage.
 
-### Viewing the Reports
-GitHub shows the HTML source code when opened inside the repo.  
-To view the rendered report with plots/tables, download the `.html` file and open it in a browser.
+**NOTE:**
+When you will try to view the html files, a message will be displayed that the files are too big to open. Hence, to view them please download the files and open in your web browser.
+
+
 ---
 
 ## Business Problem
