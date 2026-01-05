@@ -1,175 +1,186 @@
-# Predicting trending videos in YouTube (Machine Learning in R)
+# YouTube Video Performance Prediction
 
-## Overview
+## Project Overview
 
-This repository contains **a complete machine learning project** implemented across **three R Markdown files**. The project focuses on **predicting outcomes related to YouTube trending videos** using a progression of supervised learning models in **R**.
+This project analyzes YouTube trending video metadata to predict **success** using machine learning techniques in R. The analysis demonstrates a complete ML workflow from data preprocessing through advanced ensemble modeling.
 
-The three files together form an end-to-end workflow, starting from data preparation and baseline models, moving through regularization and tree-based methods, and finally applying more advanced models for improved predictive performance.
+**Academic Context:** This project was developed as part of my Data Mining course (BUDT758) at University of Maryland's Robert H. Smith School of Business. The analysis is organized across three sequential R Markdown notebooks, each building upon the previous stage.
 
-All files are part of **a single project** and should be read and run **together**.
+---
+
+## Business Problem
+
+Understanding what drives video performance on YouTube enables content creators and marketers to:
+- Optimize content strategy based on trending patterns
+- Predict potential reach before publishing
+- Identify key factors influencing the video success
+- Allocate resources to high-performing content categories
 
 ---
 
 ## Repository Structure
+```
+Project 1.Rmd / Project-1.html   # Data cleaning, EDA, baseline models
+Project 2.Rmd / Project-2.html   # Regularized regression and tree models
+Project 3.Rmd / Project-3.html   # Advanced ensemble methods
+README.md                            # This file
+```
 
-```
-Project 1.Rmd   # Data cleaning, preprocessing, EDA, baseline models
-Project 2.Rmd   # Regularized regression and decision tree models
-Project 3.Rmd   # Advanced models (ensemble methods)
-```
+**Note:** Each stage builds upon the previous one. Files should be reviewed in sequence.
 
 ---
 
-## Dataset Description
+## Dataset
 
-The project uses a **large-scale YouTube Trending Videos dataset** with more than **100,000 observations**. Each row corresponds to a video and includes metadata such as:
+### Description
+Large-scale YouTube Trending Videos dataset containing **100,000+ observations** with metadata including:
 
-* Video category
-* Channel information
-* Video duration
-* Engagement metrics (views, likes, comments)
-* Country and publishing details
+- **Video Attributes:** Category, duration, title characteristics
+- **Channel Information:** Subscriber count, channel age, upload frequency
+- **Engagement Metrics:** Views, likes, comments, shares
+- **Publishing Details:** Country, publish time, trending date
 
 ### Dataset Files
+- `yt_training_X.csv` – Training features (100K+ rows)
+- `yt_training_y.csv` – Training labels
+- `yt_test_X.csv` – Test features (unlabeled)
 
-* `yt_training_X.csv` – Training feature set
-* `yt_training_y.csv` – Training labels
-* `yt_test_X.csv` – Test feature set (unlabeled)
+### Data Availability
+**Note:** Due to GitHub file size limitations (datasets exceed 150 MB), the CSV files are not included in this repository.
 
-### Dataset Availability
-
-Due to GitHub file size limitations, the datasets (over **150 MB**) are not included in this repository.
-
-To run the project locally:
-
-1. Obtain the datasets from the original source (course-provided or external)
-2. Place all CSV files in the project working directory
-3. Knit the R Markdown files in order
+**To run locally:**
+1. Obtain datasets from course source / Kaggle / etc.
+2. Place CSV files in project working directory
+3. Knit R Markdown files in sequence
 
 ---
 
-## Project 1: Data Preparation & Baseline Models
+## Analysis Workflow (stages do not strictly correspond to project numbers)
 
-### Description
+### Stage 1: Data Preparation & Baseline Models
+**File:** Project 1.Rmd / Project-1.html
 
-This stage focuses on preparing the data and establishing baseline predictive performance.
+**Key Steps:**
+- Data loading and quality assessment
+- Missing value treatment and outlier detection
+- Feature engineering (temporal features, text processing, categorical encoding)
+- Exploratory data analysis with visualizations
+- Baseline models: Linear regression, logistic regression
 
-### Key Components
-
-* Data loading and inspection
-* Handling missing and inconsistent values
-* Feature transformation and encoding
-* Exploratory data analysis (EDA)
-* Baseline regression and classification models
-
-### Outcome
-
-A clean modeling dataset and baseline results used for comparison with more advanced methods.
+**Outcome:** Clean modeling dataset and baseline performance benchmarks
 
 ---
 
-## Project 2: Regularization & Tree-Based Models
+### Stage 2: Regularization & Tree-Based Models
+**File:** Project 2.Rmd` / Project-2.html
 
-### Description
+**Models Implemented:**
+- **Lasso Regression** (L1 regularization for feature selection)
+- **Ridge Regression** (L2 regularization for coefficient shrinkage)
+- **Elastic Net** (combined L1/L2 penalty via `glmnet`)
+- **Decision Trees** (`rpart` with pruning)
 
-This stage introduces methods to control model complexity and capture non-linear relationships.
+**Techniques:**
+- K-fold cross-validation for hyperparameter tuning
+- Regularization path analysis
+- Model comparison using validation metrics
 
-### Models Implemented
-
-* Lasso Regression (L1 regularization)
-* Ridge Regression (L2 regularization)
-* Elastic Net (via `glmnet`)
-* Decision Trees (`rpart`)
-
-### Techniques Used
-
-* Cross-validation for hyperparameter tuning
-* Shrinkage-based feature selection
-* Model comparison against baseline performance
-
-### Outcome
-
-Improved predictive performance and better generalization compared to baseline models.
+**Outcome:** Improved generalization through regularization; identification of key predictive features
 
 ---
 
-## Project 3: Advanced Tree-Based Models
+### Stage 3: Advanced Ensemble Methods
+**File:** Project 3.Rmd / Project-3.html
 
-### Description
+**Models Implemented:**
+- **Random Forest** (`ranger` package) - bagging with feature randomness
+- **Gradient Boosting** (`xgboost`) - sequential error correction
 
-This stage applies more advanced tree-based models to further improve prediction accuracy.
+**Techniques:**
+- Grid search for optimal hyperparameters
+- Feature importance analysis
+- Final model evaluation on holdout test set
 
-### Models Implemented
-
-* Random Forest (`ranger`)
-* Gradient Boosting (`xgboost`)
-
-### Techniques Used
-
-* Hyperparameter tuning
-* Model evaluation and comparison
-* Final model selection for prediction on test data
-
-### Outcome
-
-Ensemble methods achieve stronger performance than earlier approaches and are used for final predictions.
+**Outcome:** Ensemble methods achieve best performance; Random Forest selected for final predictions due to highest validation accuracy (75.14%).
 
 ---
 
 ## Results Summary
 
-Multiple models were evaluated across the three stages of the project.
+### Model Performance Comparison
 
-* Baseline linear models provided an initial performance benchmark.
-* Regularized regression and decision tree models improved generalization and handled feature complexity more effectively.
-**Ensemble methods**, particularly the **Random Forest** achieved the **highest validation accuracy (75.14% accuracy)** among all models tested and was selected for final prediction.
+| Model | Validation Accuracy | Key Strength |
+|-------|-------------------|--------------|
+| Baseline | 57.14% | Base for comparison |
+| Logistic Regression | 64.20% | Simple, interpretable |
+| Lasso Regression | 69.96% | Automatic feature selection |
+| Ridge Regression | 71.53% | Handles multicollinearity |
+| Decision Tree (maxdepth=7) | 67.08% | Captures non-linear patterns |
+| Boosting | 73.90% | Boosts performance |
+| **Random Forest** | **75.14%** | **Best overall performance** |
+| XGBoost | 72.10% | Strong performance, fast training |
 
----
-
-## Libraries & Tools
-
-The project uses the following R packages:
-
-* `tidyverse`
-* `dplyr`, `stringr`
-* `glmnet`
-* `rpart`
-* `ranger`
-* `xgboost`
-* `knitr`
-
-CRAN mirrors are explicitly set to ensure reproducibility.
+**Key Findings:**
+- Ensemble methods significantly outperformed linear baselines
+- Random Forest achieved **75.14% accuracy**, selected for final predictions, along with XGBoost.
 
 ---
 
-## How to Run the Project
+## Technical Stack
 
-1. Install R (version 4.0 or higher)
-2. Install the required packages
-3. Place the dataset CSV files in the working directory
-4. Knit the files **in the following order**:
+**Language:** R (version 4.0+)
 
+**Key Libraries:**
+- **Data Manipulation:** `tidyverse`, `dplyr`, `stringr`
+- **Modeling:** `glmnet` (regularization), `rpart` (trees), `ranger` (Random Forest), `xgboost` (gradient boosting)
+- **Utilities:** `knitr` (reporting)
+
+---
+
+## How to Reproduce
+
+### Prerequisites
+1. Install R (4.0 or higher)
+2. Install RStudio (recommended)
+3. Install required packages:
 ```r
-Project 1.Rmd → Project 2.Rmd → Project 3.Rmd
+install.packages(c("tidyverse", "dplyr", "stringr", "glmnet", 
+                   "rpart", "ranger", "xgboost", "knitr"))
 ```
+
+### Running the Analysis
+1. Clone this repository
+2. Place dataset CSV files in working directory
+3. Open and knit files **in sequence**:
+   - Project 1.Rmd → Project-1.html
+   - Project 2.Rmd → Project-2.html
+   - Project 3.Rmd → Project-3.html
 
 ---
 
 ## Key Learning Outcomes
 
-* End-to-end machine learning workflow in R
-* Data preprocessing and feature engineering
-* Regularization techniques inlcuing Tree-based and advanced Ensemble models
-* Model evaluation and comparison
-* Handling large real-world datasets
+This project demonstrates:
+- ✅ End-to-end supervised learning workflow in R
+- ✅ Data preprocessing and feature engineering techniques
+- ✅ Regularization methods (Lasso, Ridge, Elastic Net)
+- ✅ Tree-based models and ensemble methods
+- ✅ Model evaluation, comparison, and selection
+- ✅ Handling large real-world datasets (100K+ observations)
 
 ---
 
 ## Contact
 
-**Name:** **Amogha Aithal G V**
+**Amogha Aithal**   
+Email: getamogha@gmail.com  
+LinkedIn: [linkedin.com/in/amogha-aithal-539449317](https://www.linkedin.com/in/amogha-aithal-539449317)  
 
-**Email:** getamogha@gmail.com
 
-**Linkedin:** www.linkedin.com/in/amogha-aithal-539449317
+---
 
+## License
+
+This project was developed for academic purposes as part of BUDT758 (Data Mining) coursework at University of Maryland.
+
+---
