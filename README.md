@@ -169,12 +169,12 @@ install.packages(c("tidyverse", "dplyr", "stringr", "glmnet",
 ## Key Learning Outcomes
 
 This project demonstrates:
-- ✅ End-to-end supervised learning workflow in R
-- ✅ Data preprocessing and feature engineering techniques
-- ✅ Regularization methods (Lasso, Ridge, Elastic Net)
-- ✅ Tree-based models and ensemble methods
-- ✅ Model evaluation, comparison, and selection
-- ✅ Handling large real-world datasets (100K+ observations)
+✅ End-to-end supervised learning workflow in R
+✅ Data preprocessing and feature engineering techniques
+✅ Regularization methods (Lasso, Ridge, Elastic Net)
+✅ Tree-based models and ensemble methods
+✅ Model evaluation, comparison, and selection
+✅ Handling large real-world datasets (100K+ observations)
 
 ---
 
